@@ -1,12 +1,9 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (without the v prefix)"
-        required: true
-        type: string
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
   contents: write
@@ -18,6 +15,7 @@ concurrency:
 jobs:
   release:
     name: Verify and publish
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'develop'
     runs-on: ubuntu-latest
     environment: release
 
@@ -41,34 +39,27 @@ jobs:
 
       - name: Validate release version
         id: version
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          if [[ ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid semantic version: $REQUESTED_VERSION" >&2
-            exit 1
-          fi
-
           CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 \
             | python3 -c 'import json, sys; print(json.load(sys.stdin)["packages"][0]["version"])')
           FILE_VERSION=$(tr -d '[:space:]' < VERSION)
 
-          if [[ "$REQUESTED_VERSION" != "$CARGO_VERSION" ]]; then
-            echo "Requested version $REQUESTED_VERSION does not match Cargo.toml version $CARGO_VERSION" >&2
+          if [[ ! "$CARGO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version in Cargo.toml: $CARGO_VERSION" >&2
             exit 1
           fi
-          if [[ "$REQUESTED_VERSION" != "$FILE_VERSION" ]]; then
-            echo "Requested version $REQUESTED_VERSION does not match VERSION file $FILE_VERSION" >&2
+          if [[ "$CARGO_VERSION" != "$FILE_VERSION" ]]; then
+            echo "Cargo.toml version $CARGO_VERSION does not match VERSION file $FILE_VERSION" >&2
             exit 1
           fi
 
-          TAG="v${REQUESTED_VERSION}"
+          TAG="v${CARGO_VERSION}"
           if git rev-parse --verify --quiet "refs/tags/$TAG"; then
             echo "Tag $TAG already exists" >&2
             exit 1
           fi
 
-          echo "version=$REQUESTED_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$CARGO_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Check formatting
