@@ -736,7 +736,7 @@ mod tests {
                 Cigar::Match(10),
             ])),
             seq,
-            &vec![30u8; 20],
+            &[30u8; 20],
         );
         rec.set_pos(1000);
         let segs = extract_aligned_segments(&rec);
@@ -1066,29 +1066,28 @@ mod tests {
         let bam_path = tmpdir.path().join("perjunc.bam");
         let bam_str = bam_path.to_str().unwrap();
 
-        let mut records: Vec<bam::Record> = Vec::new();
-
-        // Read A: left=10>=8, right=3<8  → provides left anchor only
-        records.push(make_record(
-            b"read_a",
-            0,
-            0,
-            6000,
-            vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(3)],
-            13,
-        ));
-
-        // Read B: left=3<8, right=10>=8  → provides right anchor only
-        // Same junction: chr1:6011-6110
-        // left anchor: 3M only (no preceding RefSkip to span)
-        records.push(make_record(
-            b"read_b",
-            0,
-            0,
-            6007,
-            vec![Cigar::Match(3), Cigar::RefSkip(100), Cigar::Match(10)],
-            13,
-        ));
+        let records = vec![
+            // Read A: left=10>=8, right=3<8 → provides left anchor only
+            make_record(
+                b"read_a",
+                0,
+                0,
+                6000,
+                vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(3)],
+                13,
+            ),
+            // Read B: left=3<8, right=10>=8 → provides right anchor only
+            // Same junction: chr1:6011-6110
+            // left anchor: 3M only (no preceding RefSkip to span)
+            make_record(
+                b"read_b",
+                0,
+                0,
+                6007,
+                vec![Cigar::Match(3), Cigar::RefSkip(100), Cigar::Match(10)],
+                13,
+            ),
+        ];
 
         write_indexed_bam(bam_str, &records);
 
@@ -1129,47 +1128,46 @@ mod tests {
         let bam_path = tmpdir.path().join("diff.bam");
         let bam_str = bam_path.to_str().unwrap();
 
-        let mut records: Vec<bam::Record> = Vec::new();
-
-        // CIGAR: 10M 1X 3M 200N 10M
-        // Left anchor for 200N: backwards → 3M (3<8), Diff(1X) → break
-        // Left anchor = 3 < 8 → left anchor fails
-        // Right anchor = 10 >= 8 → right anchor passes
-        // With only one read, the junction lacks a left anchor → NOT reported
-        records.push(make_record(
-            b"diff_left",
-            0,
-            0,
-            7000,
-            vec![
-                Cigar::Match(10),
-                Cigar::Diff(1),
-                Cigar::Match(3),
-                Cigar::RefSkip(200),
-                Cigar::Match(10),
-            ],
-            24,
-        ));
-
-        // CIGAR: 10M 200N 3M 1X 10M
-        // Right anchor for 200N: forwards → 3M (3<8), Diff(1X) → break
-        // Right anchor = 3 < 8 → right anchor fails
-        // Left anchor = 10 >= 8 → left anchor passes
-        // With only one read, the junction lacks a right anchor → NOT reported
-        records.push(make_record(
-            b"diff_right",
-            0,
-            0,
-            7500,
-            vec![
-                Cigar::Match(10),
-                Cigar::RefSkip(200),
-                Cigar::Match(3),
-                Cigar::Diff(1),
-                Cigar::Match(10),
-            ],
-            24,
-        ));
+        let records = vec![
+            // CIGAR: 10M 1X 3M 200N 10M
+            // Left anchor for 200N: backwards → 3M (3<8), Diff(1X) → break
+            // Left anchor = 3 < 8 → left anchor fails
+            // Right anchor = 10 >= 8 → right anchor passes
+            // With only one read, the junction lacks a left anchor → NOT reported
+            make_record(
+                b"diff_left",
+                0,
+                0,
+                7000,
+                vec![
+                    Cigar::Match(10),
+                    Cigar::Diff(1),
+                    Cigar::Match(3),
+                    Cigar::RefSkip(200),
+                    Cigar::Match(10),
+                ],
+                24,
+            ),
+            // CIGAR: 10M 200N 3M 1X 10M
+            // Right anchor for 200N: forwards → 3M (3<8), Diff(1X) → break
+            // Right anchor = 3 < 8 → right anchor fails
+            // Left anchor = 10 >= 8 → left anchor passes
+            // With only one read, the junction lacks a right anchor → NOT reported
+            make_record(
+                b"diff_right",
+                0,
+                0,
+                7500,
+                vec![
+                    Cigar::Match(10),
+                    Cigar::RefSkip(200),
+                    Cigar::Match(3),
+                    Cigar::Diff(1),
+                    Cigar::Match(10),
+                ],
+                24,
+            ),
+        ];
 
         write_indexed_bam(bam_str, &records);
 
