@@ -5,7 +5,6 @@
 [![Create Release](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/release.yml/badge.svg)](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/release.yml)
 [![Rust](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/rust.yaml/badge.svg)](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/rust.yaml)
 [![codecov](https://codecov.io/gh/Sika-Zheng-Lab/Tosa/branch/main/graph/badge.svg)](https://codecov.io/gh/Sika-Zheng-Lab/Tosa)
-[![Publish to crates.io](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/publish.yml/badge.svg)](https://github.com/Sika-Zheng-Lab/Tosa/actions/workflows/publish.yml)
 [![crates.io](https://img.shields.io/crates/v/tosa)](https://crates.io/crates/tosa)
 [![GitHub License](https://img.shields.io/github/license/Sika-Zheng-Lab/Tosa)](https://github.com/Sika-Zheng-Lab/Tosa/blob/main/LICENSE)
 [![Docker](https://img.shields.io/docker/v/naotokubota/tosa?color=blue&label=Docker)](https://hub.docker.com/r/naotokubota/tosa)
@@ -13,6 +12,8 @@
 [![Docker Image Size](https://img.shields.io/docker/image-size/naotokubota/tosa)](https://hub.docker.com/r/naotokubota/tosa)
 
 Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/CRAM files.
+
+![Tosa overview](img/Tosa_overview.png)
 
 ## Features
 
@@ -23,47 +24,15 @@ Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/
 - **Bulk and single-cell** modes (10x Genomics-style cell barcodes)
 - Paired-end read deduplication (same junction/boundary counted once per read pair)
 
-## Usage
-
-```
-Extract junction and boundary reads from RNA-seq/scRNA-seq BAM/CRAM files
-
-Usage: tosa [OPTIONS] <mode> <bam_file> <output_prefix>
-
-Arguments:
-  <mode>           Mode of operation: 'bulk' or 'single' [possible values: bulk, single]
-  <bam_file>       Path to the BAM/CRAM file
-  <output_prefix>  Output prefix for the output files
-
-Options:
-  -a, --anchor-length <anchor_length>
-          Minimum anchor length for both sides of junctions [default: 8]
-  -b, --boundary-anchor-length <boundary_anchor_length>
-          Minimum anchor length on each side of exon-intron boundaries [default: 8]
-  -m, --min-intron-length <min_intron_length>
-          Minimum intron length for junctions [default: 20]
-  -M, --max-intron-length <max_intron_length>
-          Maximum intron length for junctions [default: 500000]
-  -l, --max-loci <max_loci>
-          Maximum number of loci the read maps to [default: 1]
-  -c, --cell-barcodes <cell_barcode_file>
-          Optional file specifying cell barcodes of interest
-  -s, --strand <strand>
-          Strand specificity of RNA library: RF (first-strand), FR (second-strand),
-          XS (use XS tags). Omit for unstranded [possible values: RF, FR, XS]
-  -g, --gtf <gtf_file>
-          GTF annotation file for exon-intron boundary read counting
-  -p, --threads <threads>
-          Number of threads for parallel processing [default: 1]
-  -v, --verbose
-          Enable verbose output to print all arguments
-  -h, --help
-          Print help
-  -V, --version
-          Print version
-```
-
 ## Installation
+
+Install the latest release from [crates.io](https://crates.io/crates/tosa):
+
+```bash
+cargo install tosa
+```
+
+To build and install from a local clone instead:
 
 ```bash
 # Build and install to ~/.cargo/bin (make sure ~/.cargo/bin is in your PATH)
@@ -137,7 +106,6 @@ For a detailed reference — including correspondence tables for other tools (HI
 > by the [Griffith Lab](http://www.griffithlab.org/) (Washington University) as part of their
 > [RNA-seq Bioinformatics](https://rnabio.org/) course — an invaluable resource for the community.
 
-
 ## Output
 
 ### Junction output (bulk mode)
@@ -166,6 +134,46 @@ For example, intron `chr2:6545675-6547042` (0-based half-open) produces:
 A read is counted only when its aligned segment fully contains the boundary interval,
 ensuring coverage on both sides of the splice site.
 
+## Usage
+
+```
+Extract junction and boundary reads from RNA-seq/scRNA-seq BAM/CRAM files
+
+Usage: tosa [OPTIONS] <mode> <bam_file> <output_prefix>
+
+Arguments:
+  <mode>           Mode of operation: 'bulk' or 'single' [possible values: bulk, single]
+  <bam_file>       Path to the BAM/CRAM file
+  <output_prefix>  Output prefix for the output files
+
+Options:
+  -a, --anchor-length <anchor_length>
+          Minimum anchor length for both sides of junctions [default: 8]
+  -b, --boundary-anchor-length <boundary_anchor_length>
+          Minimum anchor length on each side of exon-intron boundaries [default: 8]
+  -m, --min-intron-length <min_intron_length>
+          Minimum intron length for junctions [default: 20]
+  -M, --max-intron-length <max_intron_length>
+          Maximum intron length for junctions [default: 500000]
+  -l, --max-loci <max_loci>
+          Maximum number of loci the read maps to [default: 1]
+  -c, --cell-barcodes <cell_barcode_file>
+          Optional file specifying cell barcodes of interest
+  -s, --strand <strand>
+          Strand specificity of RNA library: RF (first-strand), FR (second-strand),
+          XS (use XS tags). Omit for unstranded [possible values: RF, FR, XS]
+  -g, --gtf <gtf_file>
+          GTF annotation file for exon-intron boundary read counting
+  -p, --threads <threads>
+          Number of threads for parallel processing [default: 1]
+  -v, --verbose
+          Enable verbose output to print all arguments
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
+
 ## License
 
 MIT License
@@ -173,6 +181,10 @@ MIT License
 ## Contributing
 
 Thank you for wanting to improve Tosa! If you have any bugs or questions, feel free to [open an issue](https://github.com/Sika-Zheng-Lab/Tosa/issues) or pull request.
+
+## Citation
+
+Stay tuned...
 
 ## Authors
 
