@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: release
@@ -19,20 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout merged commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
-
-      - name: Validate release notes
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          if [[ -z "${PR_BODY//[[:space:]]/}" ]]; then
-            echo "The merged pull request needs a description for the release notes" >&2
-            exit 1
-          fi
 
       - name: Install system dependencies
         run: |
@@ -63,12 +55,64 @@ jobs:
 
           TAG="v${CARGO_VERSION}"
           if git rev-parse --verify --quiet "refs/tags/$TAG"; then
-            echo "Tag $TAG already exists" >&2
-            exit 1
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            if ! git merge-base --is-ancestor "$TAG_COMMIT" HEAD; then
+              echo "Tag $TAG does not point to an ancestor of this merge commit" >&2
+              exit 1
+            fi
+            if ! git diff --quiet "$TAG_COMMIT" HEAD -- . ':(exclude).github/workflows/release.yml'; then
+              echo "Source files changed since $TAG; bump the version for a new release" >&2
+              exit 1
+            fi
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "tag_commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
           echo "version=$CARGO_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
+          TAG_COMMIT: ${{ steps.version.outputs.tag_commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          body = os.environ.get("PR_BODY", "")
+          if os.environ["TAG_EXISTS"] == "true":
+              url = (f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                     f"/commits/{os.environ['TAG_COMMIT']}/pulls")
+              request = Request(url, headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              })
+              with urlopen(request) as response:
+                  pulls = json.load(response)
+              release_pulls = [pr for pr in pulls if pr["merged_at"]
+                               and pr["base"]["ref"] == "main"
+                               and pr["head"]["ref"] == "develop"]
+              if len(release_pulls) != 1:
+                  raise SystemExit("Could not identify the PR that created the existing tag")
+              body = release_pulls[0].get("body") or ""
+
+          if not body.strip():
+              raise SystemExit("The release PR needs a description for the release notes")
+          (Path(os.environ["RUNNER_TEMP"]) / "release-notes.md").write_text(body)
+          PY
+
+      - name: Checkout existing release tag
+        if: steps.version.outputs.tag_exists == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: git checkout --detach "$TAG"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -91,7 +135,35 @@ jobs:
             -t naotokubota/tosa:latest \
             -f docker/Dockerfile .
 
+      - name: Check crates.io publication
+        id: crates_io
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.error import HTTPError
+          from urllib.request import urlopen
+
+          try:
+              with urlopen("https://index.crates.io/to/sa/tosa") as response:
+                  versions = [json.loads(line)["vers"] for line in response]
+          except HTTPError as error:
+              if error.code != 404:
+                  raise
+              versions = []
+
+          published = os.environ["VERSION"] in versions
+          if published and os.environ.get("TAG_EXISTS") != "true":
+              raise SystemExit("Crate version already exists but the release tag does not")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"published={str(published).lower()}", file=output)
+          PY
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
+
       - name: Create and push tag
+        if: steps.version.outputs.tag_exists != 'true'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -101,6 +173,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Publish to crates.io
+        if: steps.crates_io.outputs.published != 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked
@@ -123,6 +196,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
-          body: ${{ github.event.pull_request.body }}
+          body_path: ${{ runner.temp }}/release-notes.md
           draft: false
           prerelease: false
