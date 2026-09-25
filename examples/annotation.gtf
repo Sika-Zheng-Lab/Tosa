@@ -1,0 +1,13 @@
+##
+## Example GTF annotation for Tosa
+## Gene on chr1, + strand, with 3 exons and 2 introns
+##
+## Gene model:
+##   Exon 1: 1000-1200   Intron 1: 1201-1499   Exon 2: 1500-1700
+##   Intron 2: 1701-1999   Exon 3: 2000-2300
+##
+chr1	example	gene	1000	2300	.	+	.	gene_id "GENE1"; gene_name "ExampleGene";
+chr1	example	transcript	1000	2300	.	+	.	gene_id "GENE1"; transcript_id "TX1"; gene_name "ExampleGene";
+chr1	example	exon	1000	1200	.	+	.	gene_id "GENE1"; transcript_id "TX1"; exon_number "1";
+chr1	example	exon	1500	1700	.	+	.	gene_id "GENE1"; transcript_id "TX1"; exon_number "2";
+chr1	example	exon	2000	2300	.	+	.	gene_id "GENE1"; transcript_id "TX1"; exon_number "3";

@@ -1,5 +1,5 @@
 ###############################################################
-# Dockerfile to build container images for Tosa (v0.3.0)
+# Dockerfile to build container images for Tosa
 # Based on rust slim-bullseye
 ################################################################
 
@@ -14,20 +14,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -qq update && \
 	apt-get -qq -y install \
     build-essential gcc g++ make cmake libtool texinfo dpkg-dev pkg-config \
-    libgsl-dev wget locate less vim zlib1g-dev bzip2 lzma curl perl git \
+    libgsl-dev wget locate less vim zlib1g-dev bzip2 lzma curl perl \
     libboost-dev libcurl4-openssl-dev libboost-all-dev libbz2-dev liblzma-dev \
     libpcre3 libpcre3-dev libclang-dev
 
-# Install Tosa
-RUN mkdir -p /opt_tosa && \
-    cd /opt_tosa && \
-    git clone https://github.com/NaotoKubota/Tosa.git -b v0.3.0 && \
-    cd Tosa && \
+# Copy source code and build
+COPY . /opt_tosa/Tosa
+RUN cd /opt_tosa/Tosa && \
     cargo build --release && \
-    cp target/release/tosa /usr/local/bin/
-
-# Set environment variables
-ENV PATH $PATH:/opt_tosa/Tosa/target/release
+    cp target/release/tosa /usr/local/bin/ && \
+    rm -rf /opt_tosa
 
 # Clean up
 RUN apt-get -qq -y remove build-essential gcc g++ make cmake libtool texinfo dpkg-dev pkg-config && \

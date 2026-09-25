@@ -1,13 +1,13 @@
 [package]
 name = "tosa"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["Naoto Kubota <naotok@ucr.edu>"]
-description = "A tool for quantifying junction reads from bulk and single-cell RNA-seq data"
-lisense-file = "LICENSE"
+description = "Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/CRAM files"
+repository = "https://github.com/Sika-Zheng-Lab/Tosa"
+license = "MIT"
 readme = "README.md"
-keywards = ["splicing", "RNA-seq", "single-cell", "junction reads", "preprocessing"]
-categories = ["command-line-utilities", "science::bioinformatics::genomics", "science::bioinformatics::sequence-analysis"]
+keywords = ["bioinformatics", "rna-seq", "junction", "splicing", "cram"]
+categories = ["command-line-utilities", "science"]
 
 [dependencies]
 clap = "4.0"
@@ -16,6 +16,10 @@ env_logger = "0.10"
 rust-htslib = "0.48"
 itertools = "0.10"
 flate2 = "1.0"
+rayon = "1.10"
+
+[dev-dependencies]
+tempfile = "3"
 
 [[bin]]
 name = "tosa"
