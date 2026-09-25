@@ -9,17 +9,17 @@
 //! Supports both bulk RNA-seq and single-cell RNA-seq (10x Genomics-style barcodes),
 //! with configurable strand specificity (unstranded, XS, RF, FR).
 
-pub mod types;
+pub mod bam_reader;
+pub mod boundary;
 pub mod cli;
 pub mod data_loader;
-pub mod bam_reader;
-pub mod junction;
-pub mod boundary;
 pub mod gtf;
+pub mod junction;
 pub mod output;
+pub mod types;
 
-use std::collections::HashSet;
 use log::info;
+use std::collections::HashSet;
 
 use types::{Mode, RunConfig};
 
@@ -34,7 +34,10 @@ pub fn run(config: &RunConfig) -> Result<(), Box<dyn std::error::Error>> {
     info!("Input file: {}", config.bam_file);
     info!("Output prefix: {}", config.output_prefix);
     info!("Minimum anchor length: {}", config.min_anchor_length);
-    info!("Boundary anchor length: {}", config.min_boundary_anchor_length);
+    info!(
+        "Boundary anchor length: {}",
+        config.min_boundary_anchor_length
+    );
     info!("Minimum intron length: {}", config.min_intron_length);
     info!("Maximum intron length: {}", config.max_intron_length);
     info!("Maximum loci (NH): {}", config.max_loci);
@@ -70,7 +73,8 @@ pub fn run(config: &RunConfig) -> Result<(), Box<dyn std::error::Error>> {
         config,
         &cell_barcodes_of_interest,
         boundary_index.as_ref(),
-    ).map_err(|e| -> Box<dyn std::error::Error> { e })?;
+    )
+    .map_err(|e| -> Box<dyn std::error::Error> { e })?;
 
     // Write output files
     info!("Writing output files");
@@ -119,19 +123,25 @@ mod tests {
     fn test_bam_path() -> String {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/example.bam")
-            .to_str().unwrap().to_string()
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 
     fn test_gtf_path() -> String {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/annotation.gtf")
-            .to_str().unwrap().to_string()
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 
     fn test_barcodes_path() -> String {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/barcodes.tsv")
-            .to_str().unwrap().to_string()
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 
     /// Ensure info! arguments are evaluated (covers L47-48: empty barcodes path)
@@ -171,7 +181,12 @@ mod tests {
             .try_init();
 
         let tmpdir = tempfile::tempdir().unwrap();
-        let prefix = tmpdir.path().join("lib_single").to_str().unwrap().to_string();
+        let prefix = tmpdir
+            .path()
+            .join("lib_single")
+            .to_str()
+            .unwrap()
+            .to_string();
 
         let config = types::RunConfig {
             mode: types::Mode::Single,

@@ -1,7 +1,7 @@
 //! CLI argument definition for Tosa.
 
-use clap::{Arg, Command};
 use crate::types::{Mode, RunConfig, StrandMode};
+use clap::{Arg, Command};
 
 /// Build the CLI command definition.
 pub fn build_cli() -> Command {
@@ -105,9 +105,7 @@ mod tests {
 
     #[test]
     fn test_build_cli_defaults() {
-        let matches = build_cli().get_matches_from([
-            "tosa", "bulk", "test.bam", "out_prefix",
-        ]);
+        let matches = build_cli().get_matches_from(["tosa", "bulk", "test.bam", "out_prefix"]);
         let config = parse_config(&matches);
 
         assert_eq!(config.mode, Mode::Bulk);
@@ -129,17 +127,28 @@ mod tests {
     fn test_build_cli_all_options() {
         let matches = build_cli().get_matches_from([
             "tosa",
-            "-a", "10",
-            "-b", "3",
-            "-m", "50",
-            "-M", "1000000",
-            "-l", "3",
-            "-c", "barcodes.tsv",
-            "-s", "RF",
-            "-g", "annotation.gtf",
+            "-a",
+            "10",
+            "-b",
+            "3",
+            "-m",
+            "50",
+            "-M",
+            "1000000",
+            "-l",
+            "3",
+            "-c",
+            "barcodes.tsv",
+            "-s",
+            "RF",
+            "-g",
+            "annotation.gtf",
             "-v",
-            "-p", "8",
-            "single", "input.bam", "output",
+            "-p",
+            "8",
+            "single",
+            "input.bam",
+            "output",
         ]);
         let config = parse_config(&matches);
 
@@ -161,29 +170,21 @@ mod tests {
     #[test]
     fn test_parse_config_strand_modes() {
         // FR
-        let matches = build_cli().get_matches_from([
-            "tosa", "-s", "FR", "bulk", "t.bam", "o",
-        ]);
+        let matches = build_cli().get_matches_from(["tosa", "-s", "FR", "bulk", "t.bam", "o"]);
         assert_eq!(parse_config(&matches).strand_mode, StrandMode::FR);
 
         // XS
-        let matches = build_cli().get_matches_from([
-            "tosa", "-s", "XS", "bulk", "t.bam", "o",
-        ]);
+        let matches = build_cli().get_matches_from(["tosa", "-s", "XS", "bulk", "t.bam", "o"]);
         assert_eq!(parse_config(&matches).strand_mode, StrandMode::XS);
 
         // Unstranded (no -s flag)
-        let matches = build_cli().get_matches_from([
-            "tosa", "bulk", "t.bam", "o",
-        ]);
+        let matches = build_cli().get_matches_from(["tosa", "bulk", "t.bam", "o"]);
         assert_eq!(parse_config(&matches).strand_mode, StrandMode::Unstranded);
     }
 
     #[test]
     fn test_build_cli_invalid_mode() {
-        let result = build_cli().try_get_matches_from([
-            "tosa", "invalid", "test.bam", "out",
-        ]);
+        let result = build_cli().try_get_matches_from(["tosa", "invalid", "test.bam", "out"]);
         assert!(result.is_err());
     }
 }

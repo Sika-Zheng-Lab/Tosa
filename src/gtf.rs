@@ -3,13 +3,13 @@
 //! Parses a GTF file, extracts exon records, groups them by transcript,
 //! and derives intron coordinates (and thus exon-intron boundary coordinates).
 
+use log::info;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use log::info;
 
+use crate::boundary::{intron_to_boundaries, BoundaryIndex};
 use crate::types::Strand;
-use crate::boundary::{BoundaryIndex, intron_to_boundaries};
 
 /// An exon record from a GTF file.
 #[derive(Debug, Clone)]
@@ -33,7 +33,10 @@ struct ExonRecord {
 /// 4. Derive introns from gaps between adjacent exons
 /// 5. For each intron, create 5' and 3' boundary entries
 /// 6. Deduplicate boundaries across all transcripts
-pub fn parse_gtf(path: &str, boundary_anchor_length: i64) -> Result<BoundaryIndex, Box<dyn std::error::Error>> {
+pub fn parse_gtf(
+    path: &str,
+    boundary_anchor_length: i64,
+) -> Result<BoundaryIndex, Box<dyn std::error::Error>> {
     info!("Parsing GTF file: {}", path);
 
     let file = File::open(path)?;
@@ -76,16 +79,22 @@ pub fn parse_gtf(path: &str, boundary_anchor_length: i64) -> Result<BoundaryInde
         // Extract transcript_id from attributes (field 8)
         let transcript_id = extract_attribute(fields[8], "transcript_id");
         if let Some(tid) = transcript_id {
-            transcript_exons
-                .entry(tid)
-                .or_default()
-                .push(ExonRecord { chrom, start, end, strand });
+            transcript_exons.entry(tid).or_default().push(ExonRecord {
+                chrom,
+                start,
+                end,
+                strand,
+            });
             exon_count += 1;
         }
     }
 
-    info!("Parsed {} lines, {} exon records, {} transcripts",
-        line_count, exon_count, transcript_exons.len());
+    info!(
+        "Parsed {} lines, {} exon records, {} transcripts",
+        line_count,
+        exon_count,
+        transcript_exons.len()
+    );
 
     // Derive introns and build boundary index
     let mut boundary_index = BoundaryIndex::new();
@@ -109,7 +118,13 @@ pub fn parse_gtf(path: &str, boundary_anchor_length: i64) -> Result<BoundaryInde
             let chrom = &exons[i].chrom;
             let strand = exons[i].strand;
 
-            let (five_p, three_p) = intron_to_boundaries(chrom, intron_start, intron_end, strand, boundary_anchor_length);
+            let (five_p, three_p) = intron_to_boundaries(
+                chrom,
+                intron_start,
+                intron_end,
+                strand,
+                boundary_anchor_length,
+            );
 
             // Deduplicate: same boundary can arise from multiple transcripts
             if seen_boundaries.insert(five_p.boundary_id.clone()) {
@@ -122,8 +137,11 @@ pub fn parse_gtf(path: &str, boundary_anchor_length: i64) -> Result<BoundaryInde
         }
     }
 
-    info!("Derived {} introns, {} unique boundary coordinates",
-        intron_count, seen_boundaries.len());
+    info!(
+        "Derived {} introns, {} unique boundary coordinates",
+        intron_count,
+        seen_boundaries.len()
+    );
 
     Ok(boundary_index)
 }
@@ -152,8 +170,14 @@ mod tests {
     #[test]
     fn test_extract_attribute() {
         let attrs = r#"gene_id "GENE1"; transcript_id "TX1"; exon_number "1";"#;
-        assert_eq!(extract_attribute(attrs, "transcript_id"), Some("TX1".to_string()));
-        assert_eq!(extract_attribute(attrs, "gene_id"), Some("GENE1".to_string()));
+        assert_eq!(
+            extract_attribute(attrs, "transcript_id"),
+            Some("TX1".to_string())
+        );
+        assert_eq!(
+            extract_attribute(attrs, "gene_id"),
+            Some("GENE1".to_string())
+        );
         assert_eq!(extract_attribute(attrs, "missing_key"), None);
     }
 
@@ -282,8 +306,8 @@ chr1\tensembl\texon\t1200\t1400\t.\t+\t.\tgene_id \"G1\"; transcript_id \"TX1\";
 
         let boundary_index = parse_gtf(tmpfile.path().to_str().unwrap(), 1).unwrap();
         assert!(
-            !boundary_index.boundaries.contains_key("chr1") ||
-            boundary_index.find_overlapping("chr1", 0, 10000).is_empty()
+            !boundary_index.boundaries.contains_key("chr1")
+                || boundary_index.find_overlapping("chr1", 0, 10000).is_empty()
         );
     }
 
@@ -298,9 +322,8 @@ chr1\tensembl\texon\t1001\t1200\t.\t+\t.\tgene_id \"G1\"; transcript_id \"TX1\";
 
         let boundary_index = parse_gtf(tmpfile.path().to_str().unwrap(), 1).unwrap();
         assert!(
-            !boundary_index.boundaries.contains_key("chr1") ||
-            boundary_index.find_overlapping("chr1", 0, 10000).is_empty()
+            !boundary_index.boundaries.contains_key("chr1")
+                || boundary_index.find_overlapping("chr1", 0, 10000).is_empty()
         );
     }
 }
-

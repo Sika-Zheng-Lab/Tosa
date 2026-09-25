@@ -7,7 +7,9 @@ use std::io::{BufRead, BufReader};
 /// Load cell barcodes from a file into a HashSet.
 ///
 /// Returns an empty set if no file path is provided.
-pub fn load_cell_barcodes(file_path: Option<&String>) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+pub fn load_cell_barcodes(
+    file_path: Option<&String>,
+) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
     let mut barcodes = HashSet::new();
     if let Some(path) = file_path {
         let file = File::open(path)?;

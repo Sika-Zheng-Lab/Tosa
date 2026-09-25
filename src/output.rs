@@ -1,11 +1,11 @@
 //! Output file writing for junction and boundary results.
 
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Itertools;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 
 use crate::junction;
 use crate::types::BoundaryType;
@@ -96,11 +96,17 @@ pub fn write_junction_single(
     for (i, feature_key) in feature_list.iter().enumerate() {
         let (coords, strand_str) = junction::parse_junction_key(feature_key);
         if let Some(cell_counts) = junction_counts.get(*feature_key) {
-            for (barcode, count) in cell_counts.iter().sorted_by_key(|(b, _)| barcode_map.get(b.as_str()).copied().unwrap_or(0)) {
+            for (barcode, count) in cell_counts
+                .iter()
+                .sorted_by_key(|(b, _)| barcode_map.get(b.as_str()).copied().unwrap_or(0))
+            {
                 if let Some(&j) = barcode_map.get(barcode.as_str()) {
                     // FIX: j is already 1-based, use it directly for MatrixMarket
                     matrix_buffer.push(format!("{} {} {}", i + 1, j, count));
-                    tsv_buffer.push(format!("{}\t{}\t{}\t{}", coords, strand_str, barcode, count));
+                    tsv_buffer.push(format!(
+                        "{}\t{}\t{}\t{}",
+                        coords, strand_str, barcode, count
+                    ));
                 }
             }
         }
@@ -129,8 +135,14 @@ pub fn write_boundary_bulk(
     );
     writeln!(output_file, "Boundary\tType\tStrand\tCount")?;
     for (key, count) in boundary_totals.iter().sorted_by(|(a, _), (b, _)| a.cmp(b)) {
-        let btype = boundary_types.get(key).map(|t| format!("{}", t)).unwrap_or_else(|| ".".to_string());
-        let strand = boundary_strands.get(key).map(|s| format!("{}", s)).unwrap_or_else(|| ".".to_string());
+        let btype = boundary_types
+            .get(key)
+            .map(|t| format!("{}", t))
+            .unwrap_or_else(|| ".".to_string());
+        let strand = boundary_strands
+            .get(key)
+            .map(|s| format!("{}", s))
+            .unwrap_or_else(|| ".".to_string());
         writeln!(output_file, "{}\t{}\t{}\t{}", key, btype, strand, count)?;
     }
     Ok(())
@@ -170,8 +182,14 @@ pub fn write_boundary_single(
     // Write features.tsv.gz (boundary_id + type + strand)
     let feature_list: Vec<_> = boundary_counts.keys().sorted().collect();
     for feature_key in &feature_list {
-        let btype = boundary_types.get(*feature_key).map(|t| format!("{}", t)).unwrap_or_else(|| ".".to_string());
-        let strand = boundary_strands.get(*feature_key).map(|s| format!("{}", s)).unwrap_or_else(|| ".".to_string());
+        let btype = boundary_types
+            .get(*feature_key)
+            .map(|t| format!("{}", t))
+            .unwrap_or_else(|| ".".to_string());
+        let strand = boundary_strands
+            .get(*feature_key)
+            .map(|s| format!("{}", s))
+            .unwrap_or_else(|| ".".to_string());
         writeln!(features_file, "{}\t{}\t{}", feature_key, btype, strand)?;
     }
 
@@ -198,13 +216,25 @@ pub fn write_boundary_single(
     tsv_buffer.push("Boundary\tType\tStrand\tBarcode\tCount".to_string());
 
     for (i, feature_key) in feature_list.iter().enumerate() {
-        let btype = boundary_types.get(*feature_key).map(|t| format!("{}", t)).unwrap_or_else(|| ".".to_string());
-        let strand = boundary_strands.get(*feature_key).map(|s| format!("{}", s)).unwrap_or_else(|| ".".to_string());
+        let btype = boundary_types
+            .get(*feature_key)
+            .map(|t| format!("{}", t))
+            .unwrap_or_else(|| ".".to_string());
+        let strand = boundary_strands
+            .get(*feature_key)
+            .map(|s| format!("{}", s))
+            .unwrap_or_else(|| ".".to_string());
         if let Some(cell_counts) = boundary_counts.get(*feature_key) {
-            for (barcode, count) in cell_counts.iter().sorted_by_key(|(b, _)| barcode_map.get(b.as_str()).copied().unwrap_or(0)) {
+            for (barcode, count) in cell_counts
+                .iter()
+                .sorted_by_key(|(b, _)| barcode_map.get(b.as_str()).copied().unwrap_or(0))
+            {
                 if let Some(&j) = barcode_map.get(barcode.as_str()) {
                     matrix_buffer.push(format!("{} {} {}", i + 1, j, count));
-                    tsv_buffer.push(format!("{}\t{}\t{}\t{}\t{}", feature_key, btype, strand, barcode, count));
+                    tsv_buffer.push(format!(
+                        "{}\t{}\t{}\t{}\t{}",
+                        feature_key, btype, strand, barcode, count
+                    ));
                 }
             }
         }

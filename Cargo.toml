@@ -1,12 +1,12 @@
 [package]
 name = "tosa"
-version = "0.3.0"
+version = "1.0.0"
 edition = "2021"
 description = "Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/CRAM files"
 repository = "https://github.com/Sika-Zheng-Lab/Tosa"
 license = "MIT"
 readme = "README.md"
-keywords = ["bioinformatics", "rna-seq", "junction", "splicing", "bam", "cram"]
+keywords = ["bioinformatics", "rna-seq", "junction", "splicing", "cram"]
 categories = ["command-line-utilities", "science"]
 
 [dependencies]
@@ -20,7 +20,6 @@ rayon = "1.10"
 
 [dev-dependencies]
 tempfile = "3"
-version-sync = "0.9"
 
 [[bin]]
 name = "tosa"

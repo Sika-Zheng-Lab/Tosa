@@ -23,12 +23,16 @@
 //!
 //! Matching GTF annotation is in `examples/annotation.gtf`.
 
-use rust_htslib::bam::{self, Read, record::Aux, record::Cigar, record::CigarString, Record, Writer};
 use rust_htslib::bam::header::{Header, HeaderRecord};
+use rust_htslib::bam::{
+    self, record::Aux, record::Cigar, record::CigarString, Read, Record, Writer,
+};
 use std::io::Write;
 
 fn main() {
-    let out_dir = std::env::args().nth(1).unwrap_or_else(|| "examples".to_string());
+    let out_dir = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "examples".to_string());
     let bam_path = format!("{}/example.bam", out_dir);
 
     // --- BAM header: one reference sequence chr1 (10 kb) ---
@@ -76,41 +80,245 @@ fn main() {
     //   CCCC-1 3' bdry intron2: 1 read  → deduped count = 1
     let reads: Vec<ReadSpec> = vec![
         // ── Junction 1 reads (intron at 0-based 1200..1499) ─────────
-        ReadSpec { qname: "read01", pos: 1140, cigar: vec![Cigar::Match(60), Cigar::RefSkip(299), Cigar::Match(40)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "AAAA" },
-        ReadSpec { qname: "read02", pos: 1145, cigar: vec![Cigar::Match(55), Cigar::RefSkip(299), Cigar::Match(45)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "AAAA" },
-        ReadSpec { qname: "read03", pos: 1148, cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "AAAA" },
-        ReadSpec { qname: "read10", pos: 1148, cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)], xs: Some(b'-'), nh: 1, cb: "BBBB-1", ub: "GGGG" },
-        ReadSpec { qname: "read04", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "BBBB" },
-        ReadSpec { qname: "read05", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "BBBB" },
+        ReadSpec {
+            qname: "read01",
+            pos: 1140,
+            cigar: vec![Cigar::Match(60), Cigar::RefSkip(299), Cigar::Match(40)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "AAAA",
+        },
+        ReadSpec {
+            qname: "read02",
+            pos: 1145,
+            cigar: vec![Cigar::Match(55), Cigar::RefSkip(299), Cigar::Match(45)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "AAAA",
+        },
+        ReadSpec {
+            qname: "read03",
+            pos: 1148,
+            cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "AAAA",
+        },
+        ReadSpec {
+            qname: "read10",
+            pos: 1148,
+            cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)],
+            xs: Some(b'-'),
+            nh: 1,
+            cb: "BBBB-1",
+            ub: "GGGG",
+        },
+        ReadSpec {
+            qname: "read04",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "BBBB",
+        },
+        ReadSpec {
+            qname: "read05",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "BBBB",
+        },
         // Duplicate pair: same QNAME → counted only once (read-name dedup)
-        ReadSpec { qname: "read_dup", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "CCCC" },
-        ReadSpec { qname: "read_dup", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "CCCC" },
-        ReadSpec { qname: "read06", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "DDDD" },
-        ReadSpec { qname: "read11", pos: 1150, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'-'), nh: 1, cb: "BBBB-1", ub: "GGGG" },
-        ReadSpec { qname: "read07", pos: 1152, cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "DDDD" },
-        ReadSpec { qname: "read12", pos: 1152, cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)], xs: Some(b'-'), nh: 1, cb: "BBBB-1", ub: "HHHH" },
-        ReadSpec { qname: "read08", pos: 1155, cigar: vec![Cigar::Match(45), Cigar::RefSkip(299), Cigar::Match(55)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "EEEE" },
-        ReadSpec { qname: "read09", pos: 1160, cigar: vec![Cigar::Match(40), Cigar::RefSkip(299), Cigar::Match(60)], xs: Some(b'+'), nh: 1, cb: "AAAA-1", ub: "FFFF" },
-
+        ReadSpec {
+            qname: "read_dup",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "CCCC",
+        },
+        ReadSpec {
+            qname: "read_dup",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "CCCC",
+        },
+        ReadSpec {
+            qname: "read06",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "DDDD",
+        },
+        ReadSpec {
+            qname: "read11",
+            pos: 1150,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'-'),
+            nh: 1,
+            cb: "BBBB-1",
+            ub: "GGGG",
+        },
+        ReadSpec {
+            qname: "read07",
+            pos: 1152,
+            cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "DDDD",
+        },
+        ReadSpec {
+            qname: "read12",
+            pos: 1152,
+            cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)],
+            xs: Some(b'-'),
+            nh: 1,
+            cb: "BBBB-1",
+            ub: "HHHH",
+        },
+        ReadSpec {
+            qname: "read08",
+            pos: 1155,
+            cigar: vec![Cigar::Match(45), Cigar::RefSkip(299), Cigar::Match(55)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "EEEE",
+        },
+        ReadSpec {
+            qname: "read09",
+            pos: 1160,
+            cigar: vec![Cigar::Match(40), Cigar::RefSkip(299), Cigar::Match(60)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "AAAA-1",
+            ub: "FFFF",
+        },
         // ── Boundary reads (non-spliced, overlap exon-intron boundaries) ─
-        ReadSpec { qname: "read13", pos: 1190, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "LLLL" },  // 5' boundary intron 1
-        ReadSpec { qname: "read14", pos: 1195, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "LLLL" },  // 5' boundary intron 1
-        ReadSpec { qname: "read15", pos: 1450, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "MMMM" },  // 3' boundary intron 1
-        ReadSpec { qname: "read16", pos: 1455, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "MMMM" },  // 3' boundary intron 1
-
+        ReadSpec {
+            qname: "read13",
+            pos: 1190,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "LLLL",
+        }, // 5' boundary intron 1
+        ReadSpec {
+            qname: "read14",
+            pos: 1195,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "LLLL",
+        }, // 5' boundary intron 1
+        ReadSpec {
+            qname: "read15",
+            pos: 1450,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "MMMM",
+        }, // 3' boundary intron 1
+        ReadSpec {
+            qname: "read16",
+            pos: 1455,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "MMMM",
+        }, // 3' boundary intron 1
         // ── Junction 2 reads (intron at 0-based 1700..1999) ─────────
-        ReadSpec { qname: "read17", pos: 1645, cigar: vec![Cigar::Match(55), Cigar::RefSkip(299), Cigar::Match(45)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "IIII" },
-        ReadSpec { qname: "read18", pos: 1648, cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "IIII" },
-        ReadSpec { qname: "read19", pos: 1650, cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "JJJJ" },
-        ReadSpec { qname: "read20", pos: 1652, cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "JJJJ" },
-        ReadSpec { qname: "read21", pos: 1655, cigar: vec![Cigar::Match(45), Cigar::RefSkip(299), Cigar::Match(55)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "KKKK" },
-
+        ReadSpec {
+            qname: "read17",
+            pos: 1645,
+            cigar: vec![Cigar::Match(55), Cigar::RefSkip(299), Cigar::Match(45)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "IIII",
+        },
+        ReadSpec {
+            qname: "read18",
+            pos: 1648,
+            cigar: vec![Cigar::Match(52), Cigar::RefSkip(299), Cigar::Match(48)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "IIII",
+        },
+        ReadSpec {
+            qname: "read19",
+            pos: 1650,
+            cigar: vec![Cigar::Match(50), Cigar::RefSkip(299), Cigar::Match(50)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "JJJJ",
+        },
+        ReadSpec {
+            qname: "read20",
+            pos: 1652,
+            cigar: vec![Cigar::Match(48), Cigar::RefSkip(299), Cigar::Match(52)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "JJJJ",
+        },
+        ReadSpec {
+            qname: "read21",
+            pos: 1655,
+            cigar: vec![Cigar::Match(45), Cigar::RefSkip(299), Cigar::Match(55)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "KKKK",
+        },
         // ── More boundary reads ─────────────────────────────────────
-        ReadSpec { qname: "read22", pos: 1690, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "NNNN" },  // 5' boundary intron 2
-        ReadSpec { qname: "read23", pos: 1950, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 1, cb: "CCCC-1", ub: "OOOO" },  // 3' boundary intron 2
-
+        ReadSpec {
+            qname: "read22",
+            pos: 1690,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "NNNN",
+        }, // 5' boundary intron 2
+        ReadSpec {
+            qname: "read23",
+            pos: 1950,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 1,
+            cb: "CCCC-1",
+            ub: "OOOO",
+        }, // 3' boundary intron 2
         // ── Multi-mapped read (filtered by default NH ≤ 1) ──────────
-        ReadSpec { qname: "read_multi", pos: 5000, cigar: vec![Cigar::Match(100)], xs: Some(b'+'), nh: 2, cb: "AAAA-1", ub: "PPPP" },
+        ReadSpec {
+            qname: "read_multi",
+            pos: 5000,
+            cigar: vec![Cigar::Match(100)],
+            xs: Some(b'+'),
+            nh: 2,
+            cb: "AAAA-1",
+            ub: "PPPP",
+        },
     ];
 
     for rd in &reads {
@@ -118,18 +326,25 @@ fn main() {
         let cigar_str = CigarString(rd.cigar.clone());
 
         // Query length = sum of query-consuming CIGAR ops (M, I, S, =, X)
-        let qlen: u32 = rd.cigar.iter().map(|c| match c {
-            Cigar::Match(l) | Cigar::Ins(l) | Cigar::SoftClip(l)
-            | Cigar::Equal(l) | Cigar::Diff(l) => *l,
-            _ => 0,
-        }).sum();
+        let qlen: u32 = rd
+            .cigar
+            .iter()
+            .map(|c| match c {
+                Cigar::Match(l)
+                | Cigar::Ins(l)
+                | Cigar::SoftClip(l)
+                | Cigar::Equal(l)
+                | Cigar::Diff(l) => *l,
+                _ => 0,
+            })
+            .sum();
 
         let seq = vec![b'A'; qlen as usize];
         let qual = vec![40u8; qlen as usize];
 
         rec.set(rd.qname.as_bytes(), Some(&cigar_str), &seq, &qual);
-        rec.set_flags(0);  // mapped, forward strand, unpaired
-        rec.set_tid(0);   // chr1
+        rec.set_flags(0); // mapped, forward strand, unpaired
+        rec.set_tid(0); // chr1
         rec.set_pos(rd.pos);
         rec.set_mapq(255);
         rec.push_aux(b"NH", Aux::U8(rd.nh)).unwrap();
@@ -163,7 +378,8 @@ fn main() {
     let ref_path = tmp_dir.path().join("reference.fa");
     let ref_index_path = tmp_dir.path().join("reference.fa.fai");
     {
-        let mut fa_file = std::fs::File::create(&ref_path).expect("Failed to create reference FASTA");
+        let mut fa_file =
+            std::fs::File::create(&ref_path).expect("Failed to create reference FASTA");
         // chr1: 10000 bp of 'N' (same length as the SQ header)
         writeln!(fa_file, ">chr1").unwrap();
         let seq = "N".repeat(10000);
@@ -183,16 +399,21 @@ fn main() {
     // --- Generate CRAM from BAM ---
     let cram_path = format!("{}/example.cram", out_dir);
     {
-        let mut bam_reader = bam::Reader::from_path(&bam_path).expect("Failed to open BAM for CRAM conversion");
+        let mut bam_reader =
+            bam::Reader::from_path(&bam_path).expect("Failed to open BAM for CRAM conversion");
         let header = bam::Header::from_template(bam_reader.header());
         let mut cram_writer = Writer::from_path(&cram_path, &header, bam::Format::Cram)
             .expect("Failed to create CRAM writer");
-        cram_writer.set_reference(ref_path.to_str().unwrap()).expect("Failed to set CRAM reference");
+        cram_writer
+            .set_reference(ref_path.to_str().unwrap())
+            .expect("Failed to set CRAM reference");
 
         let mut record = Record::new();
         while let Some(result) = bam_reader.read(&mut record) {
             result.unwrap();
-            cram_writer.write(&record).expect("Failed to write CRAM record");
+            cram_writer
+                .write(&record)
+                .expect("Failed to write CRAM record");
         }
     }
 

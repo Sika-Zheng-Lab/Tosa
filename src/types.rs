@@ -1,8 +1,8 @@
 //! Common type definitions for Tosa.
 
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 /// Mode of operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,10 +78,7 @@ impl JunctionKey {
     pub fn to_string_key(&self, reference_names: &[String]) -> String {
         format!(
             "{}:{}-{}:{}",
-            reference_names[self.tid as usize],
-            self.start,
-            self.end,
-            self.strand
+            reference_names[self.tid as usize], self.start, self.end, self.strand
         )
     }
 }
@@ -211,7 +208,12 @@ mod tests {
 
     #[test]
     fn test_junction_key() {
-        let key = JunctionKey { tid: 0, start: 100, end: 200, strand: Strand::Plus };
+        let key = JunctionKey {
+            tid: 0,
+            start: 100,
+            end: 200,
+            strand: Strand::Plus,
+        };
         let ref_names = vec!["chr1".to_string(), "chr2".to_string()];
         assert_eq!(key.to_string_key(&ref_names), "chr1:100-200:+");
     }

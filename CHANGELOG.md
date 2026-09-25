@@ -2,7 +2,9 @@
 
 All notable changes to this Tosa project will be documented in this file.
 
-## [v1.0.0] - 2026-XX-XX
+## [v1.0.0] - 2026-09-24
+
+First stable release of Tosa!
 
 ### Added
 
@@ -14,8 +16,7 @@ All notable changes to this Tosa project will be documented in this file.
 - Add Strand column to junction and boundary output files.
 - Add unit tests for junction counting, boundary counting, GTF parsing, and strand determination.
 - Add integration tests using test BAM and CRAM files.
-- Add version synchronization tests (version-sync).
-- Add `build.rs` for automatic VERSION file generation from Cargo.toml.
+- Add release-time version synchronization checks for Cargo.toml and VERSION.
 
 ### Changed
 

@@ -9,8 +9,8 @@
 //! - 5' boundary: `chr2:6545674-6545676`  (1 exon base + 1 intron base)
 //! - 3' boundary: `chr2:6547041-6547043`  (1 intron base + 1 exon base)
 
-use std::collections::{HashMap, HashSet, BTreeMap};
 use crate::types::{BoundaryType, Mode, Strand};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// A single boundary entry derived from GTF annotation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -57,7 +57,12 @@ impl BoundaryIndex {
 
     /// Find all boundaries on a given chromosome whose interval is completely
     /// contained within [seg_start, seg_end).
-    pub fn find_overlapping(&self, chrom: &str, seg_start: i64, seg_end: i64) -> Vec<&BoundaryEntry> {
+    pub fn find_overlapping(
+        &self,
+        chrom: &str,
+        seg_start: i64,
+        seg_end: i64,
+    ) -> Vec<&BoundaryEntry> {
         let mut results = Vec::new();
         if let Some(chrom_boundaries) = self.boundaries.get(chrom) {
             // Use BTreeMap range to efficiently find candidates
@@ -80,16 +85,32 @@ impl BoundaryIndex {
 /// on each side:
 /// - 5' boundary: `[intron_start - anchor_length, intron_start + anchor_length)`
 /// - 3' boundary: `[intron_end - anchor_length, intron_end + anchor_length)`
-pub fn intron_to_boundaries(chrom: &str, intron_start: i64, intron_end: i64, strand: Strand, anchor_length: i64) -> (BoundaryEntry, BoundaryEntry) {
+pub fn intron_to_boundaries(
+    chrom: &str,
+    intron_start: i64,
+    intron_end: i64,
+    strand: Strand,
+    anchor_length: i64,
+) -> (BoundaryEntry, BoundaryEntry) {
     let five_prime = BoundaryEntry {
-        boundary_id: format!("{}:{}-{}", chrom, intron_start - anchor_length, intron_start + anchor_length),
+        boundary_id: format!(
+            "{}:{}-{}",
+            chrom,
+            intron_start - anchor_length,
+            intron_start + anchor_length
+        ),
         start: intron_start - anchor_length,
         end: intron_start + anchor_length,
         boundary_type: BoundaryType::FivePrime,
         strand,
     };
     let three_prime = BoundaryEntry {
-        boundary_id: format!("{}:{}-{}", chrom, intron_end - anchor_length, intron_end + anchor_length),
+        boundary_id: format!(
+            "{}:{}-{}",
+            chrom,
+            intron_end - anchor_length,
+            intron_end + anchor_length
+        ),
         start: intron_end - anchor_length,
         end: intron_end + anchor_length,
         boundary_type: BoundaryType::ThreePrime,
@@ -131,7 +152,9 @@ pub fn count_boundaries(
             }
 
             // Record type and strand
-            boundary_types.entry(key.clone()).or_insert(entry.boundary_type);
+            boundary_types
+                .entry(key.clone())
+                .or_insert(entry.boundary_type);
             boundary_strands.entry(key.clone()).or_insert(strand);
 
             match mode {
@@ -331,7 +354,11 @@ mod tests {
         }
 
         assert_eq!(
-            *boundary_counts.get("chr1:999-1001").unwrap().get("AAAA-1").unwrap(),
+            *boundary_counts
+                .get("chr1:999-1001")
+                .unwrap()
+                .get("AAAA-1")
+                .unwrap(),
             1,
             "Same barcode+UMI should be counted only once"
         );
@@ -357,20 +384,44 @@ mod tests {
         let umi2 = "TGCA".to_string();
 
         count_boundaries(
-            "chr1", &segments, &index, Some(&barcode), Some(&umi1),
-            Strand::Plus, &mut boundary_counts, &mut boundary_totals,
-            &mut boundary_types, &mut boundary_strands, &mut processed,
-            &mut processed_umis, 11111, Mode::Single,
+            "chr1",
+            &segments,
+            &index,
+            Some(&barcode),
+            Some(&umi1),
+            Strand::Plus,
+            &mut boundary_counts,
+            &mut boundary_totals,
+            &mut boundary_types,
+            &mut boundary_strands,
+            &mut processed,
+            &mut processed_umis,
+            11111,
+            Mode::Single,
         );
         count_boundaries(
-            "chr1", &segments, &index, Some(&barcode), Some(&umi2),
-            Strand::Plus, &mut boundary_counts, &mut boundary_totals,
-            &mut boundary_types, &mut boundary_strands, &mut processed,
-            &mut processed_umis, 22222, Mode::Single,
+            "chr1",
+            &segments,
+            &index,
+            Some(&barcode),
+            Some(&umi2),
+            Strand::Plus,
+            &mut boundary_counts,
+            &mut boundary_totals,
+            &mut boundary_types,
+            &mut boundary_strands,
+            &mut processed,
+            &mut processed_umis,
+            22222,
+            Mode::Single,
         );
 
         assert_eq!(
-            *boundary_counts.get("chr1:999-1001").unwrap().get("AAAA-1").unwrap(),
+            *boundary_counts
+                .get("chr1:999-1001")
+                .unwrap()
+                .get("AAAA-1")
+                .unwrap(),
             2,
             "Different UMIs should be counted separately"
         );

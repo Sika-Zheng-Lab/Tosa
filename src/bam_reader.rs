@@ -1,17 +1,17 @@
 //! BAM/CRAM file processing: read iteration, CIGAR parsing, junction extraction, and boundary counting.
 
-use rust_htslib::bam::{self, Read};
-use rust_htslib::bam::IndexedReader;
+use log::{debug, info};
+use rayon::prelude::*;
 use rust_htslib::bam::record::{Aux, Cigar};
+use rust_htslib::bam::IndexedReader;
+use rust_htslib::bam::{self, Read};
 use rust_htslib::htslib;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use log::{info, debug};
-use rayon::prelude::*;
 
-use crate::types::{RunConfig, StrandMode, Strand, Mode, JunctionKey, hash_read_name};
-use crate::junction;
 use crate::boundary::{self, BoundaryIndex};
+use crate::junction;
+use crate::types::{hash_read_name, JunctionKey, Mode, RunConfig, Strand, StrandMode};
 
 /// Results from processing a BAM file.
 pub struct ProcessingResult {
@@ -35,8 +35,7 @@ pub struct ProcessingResult {
 
 /// SAM fields Tosa needs from each record (everything except SEQ/QUAL).
 /// By declaring these, CRAM can be decoded without a reference FASTA.
-const TOSA_REQUIRED_FIELDS: u32 =
-    htslib::sam_fields_SAM_QNAME
+const TOSA_REQUIRED_FIELDS: u32 = htslib::sam_fields_SAM_QNAME
     | htslib::sam_fields_SAM_FLAG
     | htslib::sam_fields_SAM_RNAME
     | htslib::sam_fields_SAM_POS
@@ -44,7 +43,10 @@ const TOSA_REQUIRED_FIELDS: u32 =
     | htslib::sam_fields_SAM_AUX;
 
 /// Count total mapped reads using the BAM/CRAM index.
-pub fn count_total_reads(bam_file: &str, threads: usize) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+pub fn count_total_reads(
+    bam_file: &str,
+    threads: usize,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let mut bam_index_reader = IndexedReader::from_path(bam_file)?;
     if threads > 1 {
         bam_index_reader.set_threads(threads - 1)?;
@@ -58,30 +60,38 @@ pub fn count_total_reads(bam_file: &str, threads: usize) -> Result<u64, Box<dyn 
 /// Determine strand of a read based on the strand mode.
 pub fn determine_strand(record: &bam::Record, strand_mode: &StrandMode) -> Strand {
     match strand_mode {
-        StrandMode::Unstranded => {
-            Strand::Unknown
-        }
-        StrandMode::XS => {
-            match record.aux(b"XS") {
-                Ok(Aux::Char(c)) => match c {
-                    b'+' => Strand::Plus,
-                    b'-' => Strand::Minus,
-                    _ => Strand::Unknown,
-                },
+        StrandMode::Unstranded => Strand::Unknown,
+        StrandMode::XS => match record.aux(b"XS") {
+            Ok(Aux::Char(c)) => match c {
+                b'+' => Strand::Plus,
+                b'-' => Strand::Minus,
                 _ => Strand::Unknown,
-            }
-        }
+            },
+            _ => Strand::Unknown,
+        },
         StrandMode::RF => {
             // First-strand: read1+reverse => +, read1+forward => -
             //               read2+reverse => -, read2+forward => +
             let is_reverse = record.is_reverse();
             if record.is_first_in_template() {
-                if is_reverse { Strand::Plus } else { Strand::Minus }
+                if is_reverse {
+                    Strand::Plus
+                } else {
+                    Strand::Minus
+                }
             } else if record.is_last_in_template() {
-                if is_reverse { Strand::Minus } else { Strand::Plus }
+                if is_reverse {
+                    Strand::Minus
+                } else {
+                    Strand::Plus
+                }
             } else {
                 // Single-end read in RF mode: reverse => +, forward => -
-                if is_reverse { Strand::Plus } else { Strand::Minus }
+                if is_reverse {
+                    Strand::Plus
+                } else {
+                    Strand::Minus
+                }
             }
         }
         StrandMode::FR => {
@@ -89,12 +99,24 @@ pub fn determine_strand(record: &bam::Record, strand_mode: &StrandMode) -> Stran
             //                read2+forward => -, read2+reverse => +
             let is_reverse = record.is_reverse();
             if record.is_first_in_template() {
-                if is_reverse { Strand::Minus } else { Strand::Plus }
+                if is_reverse {
+                    Strand::Minus
+                } else {
+                    Strand::Plus
+                }
             } else if record.is_last_in_template() {
-                if is_reverse { Strand::Plus } else { Strand::Minus }
+                if is_reverse {
+                    Strand::Plus
+                } else {
+                    Strand::Minus
+                }
             } else {
                 // Single-end read in FR mode: forward => +, reverse => -
-                if is_reverse { Strand::Minus } else { Strand::Plus }
+                if is_reverse {
+                    Strand::Minus
+                } else {
+                    Strand::Plus
+                }
             }
         }
     }
@@ -322,11 +344,9 @@ fn process_chromosome(
                     // Per-junction anchor tracking (regtools-style):
                     // OR-accumulate left/right anchor flags across all reads.
                     {
-                        let left_flag =
-                            junction_has_left_anchor.entry(jkey).or_insert(false);
+                        let left_flag = junction_has_left_anchor.entry(jkey).or_insert(false);
                         *left_flag = *left_flag || has_left_anchor;
-                        let right_flag =
-                            junction_has_right_anchor.entry(jkey).or_insert(false);
+                        let right_flag = junction_has_right_anchor.entry(jkey).or_insert(false);
                         *right_flag = *right_flag || has_right_anchor;
                     }
 
@@ -432,8 +452,8 @@ pub fn process_bam_records(
         .num_threads(config.threads)
         .build()?;
 
-    let chrom_results: Vec<Result<ChromResult, Box<dyn std::error::Error + Send + Sync>>> =
-        pool.install(|| {
+    let chrom_results: Vec<Result<ChromResult, Box<dyn std::error::Error + Send + Sync>>> = pool
+        .install(|| {
             chroms
                 .par_iter()
                 .map(|(tid, chrom)| {
@@ -489,7 +509,10 @@ pub fn process_bam_records(
         boundary_strands.extend(cr.boundary_strands);
     }
 
-    info!("Progress: 100% ({} / {})", total_mapped_reads, total_mapped_reads);
+    info!(
+        "Progress: 100% ({} / {})",
+        total_mapped_reads, total_mapped_reads
+    );
 
     // Filter junctions: only emit those where at least one read provided a
     // sufficient left anchor AND at least one read provided a sufficient right
@@ -556,7 +579,10 @@ mod tests {
     #[test]
     fn test_strand_unstranded() {
         let rec = record_with_flags(0);
-        assert_eq!(determine_strand(&rec, &StrandMode::Unstranded), Strand::Unknown);
+        assert_eq!(
+            determine_strand(&rec, &StrandMode::Unstranded),
+            Strand::Unknown
+        );
     }
 
     // ---------------------------------------------------------------
@@ -799,12 +825,7 @@ mod tests {
         let mut rec = bam::Record::new();
         let seq = vec![b'A'; seq_len];
         let qual = vec![30u8; seq_len];
-        rec.set(
-            name,
-            Some(&bam::record::CigarString(cigar)),
-            &seq,
-            &qual,
-        );
+        rec.set(name, Some(&bam::record::CigarString(cigar)), &seq, &qual);
         rec.set_flags(flags);
         rec.set_tid(tid);
         rec.set_pos(pos);
@@ -865,7 +886,10 @@ mod tests {
 
         // 3) Short intron (50 < 70 = min_intron_length) → covers L220-221
         records.push(make_record(
-            b"short_intron", 0, 0, 400,
+            b"short_intron",
+            0,
+            0,
+            400,
             vec![Cigar::Match(10), Cigar::RefSkip(50), Cigar::Match(10)],
             20,
         ));
@@ -875,10 +899,16 @@ mod tests {
         //    Processing the 200N: left anchor goes backwards through 3M (3<8),
         //    then encounters RefSkip(100N) → continue (L236), then 10M → 13>=8
         records.push(make_record(
-            b"refskip_left", 0, 0, 500,
+            b"refskip_left",
+            0,
+            0,
+            500,
             vec![
-                Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(3),
-                Cigar::RefSkip(200), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::RefSkip(100),
+                Cigar::Match(3),
+                Cigar::RefSkip(200),
+                Cigar::Match(10),
             ],
             23,
         ));
@@ -887,10 +917,16 @@ mod tests {
         //    CIGAR: 10M 2I 3M 200N 10M
         //    Processing 200N: left anchor → 3M (3<8), Ins(2) → break
         records.push(make_record(
-            b"ins_left", 0, 0, 600,
+            b"ins_left",
+            0,
+            0,
+            600,
             vec![
-                Cigar::Match(10), Cigar::Ins(2), Cigar::Match(3),
-                Cigar::RefSkip(200), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::Ins(2),
+                Cigar::Match(3),
+                Cigar::RefSkip(200),
+                Cigar::Match(10),
             ],
             25,
         ));
@@ -899,10 +935,16 @@ mod tests {
         //    CIGAR: 10M 200N 3M 100N 10M
         //    Processing 200N: right anchor → 3M (3<8), RefSkip(100N) → continue (L253), 10M→13>=8
         records.push(make_record(
-            b"refskip_right", 0, 0, 800,
+            b"refskip_right",
+            0,
+            0,
+            800,
             vec![
-                Cigar::Match(10), Cigar::RefSkip(200), Cigar::Match(3),
-                Cigar::RefSkip(100), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::RefSkip(200),
+                Cigar::Match(3),
+                Cigar::RefSkip(100),
+                Cigar::Match(10),
             ],
             23,
         ));
@@ -911,20 +953,31 @@ mod tests {
         //    CIGAR: 10M 200N 3M 2I 10M
         //    Processing 200N: right anchor → 3M (3<8), Ins(2) → break
         records.push(make_record(
-            b"ins_right", 0, 0, 1000,
+            b"ins_right",
+            0,
+            0,
+            1000,
             vec![
-                Cigar::Match(10), Cigar::RefSkip(200), Cigar::Match(3),
-                Cigar::Ins(2), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::RefSkip(200),
+                Cigar::Match(3),
+                Cigar::Ins(2),
+                Cigar::Match(10),
             ],
             25,
         ));
 
         // 8) SoftClip + Ins in CIGAR loop → covers L309 (SoftClip continue), L314 (_ => 0 for Ins)
         records.push(make_record(
-            b"softclip_ins", 0, 0, 2000,
+            b"softclip_ins",
+            0,
+            0,
+            2000,
             vec![
-                Cigar::SoftClip(3), Cigar::Match(10),
-                Cigar::Ins(2), Cigar::Match(10),
+                Cigar::SoftClip(3),
+                Cigar::Match(10),
+                Cigar::Ins(2),
+                Cigar::Match(10),
             ],
             25,
         ));
@@ -936,12 +989,18 @@ mod tests {
         //   Per-junction: left OK (both reads), right OK (good_anchor) → junction reported
         //   Both reads are counted.
         records.push(make_record(
-            b"bad_anchor", 0, 0, 5000,
+            b"bad_anchor",
+            0,
+            0,
+            5000,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(3)],
             13,
         ));
         records.push(make_record(
-            b"good_anchor", 0, 0, 5000,
+            b"good_anchor",
+            0,
+            0,
+            5000,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(10)],
             20,
         ));
@@ -976,16 +1035,15 @@ mod tests {
             threads: 1,
         };
 
-        let result = process_bam_records(
-            &config,
-            &HashSet::new(),
-            None,
-        ).unwrap();
+        let result = process_bam_records(&config, &HashSet::new(), None).unwrap();
 
         // The good_anchor + bad_anchor pair → junction chr1:5011-5110 should be found
         // Junction keys include strand suffix ":." for Unstranded mode
-        assert!(result.junction_totals.contains_key("chr1:5011-5110:."),
-            "Expected junction chr1:5011-5110:., got: {:?}", result.junction_totals.keys().collect::<Vec<_>>());
+        assert!(
+            result.junction_totals.contains_key("chr1:5011-5110:."),
+            "Expected junction chr1:5011-5110:., got: {:?}",
+            result.junction_totals.keys().collect::<Vec<_>>()
+        );
         // Per-junction anchor: bad_anchor provides left anchor, good_anchor provides both.
         // Both reads are always counted (filtering is at junction level, not read level).
         assert_eq!(*result.junction_totals.get("chr1:5011-5110:.").unwrap(), 2);
@@ -993,8 +1051,10 @@ mod tests {
         // refskip_left produces junction at chr1:511-610 and chr1:614-813
         // refskip_right produces: pos=800, Match(10)→810, RefSkip(200): junction at chr1:811-1010
         // right anchor: 3+skip+10=13>=8 (RefSkip spans into next exon)
-        assert!(result.junction_totals.contains_key("chr1:811-1010:."),
-            "Expected junction chr1:811-1010:. from refskip_right");
+        assert!(
+            result.junction_totals.contains_key("chr1:811-1010:."),
+            "Expected junction chr1:811-1010:. from refskip_right"
+        );
     }
 
     // ---------------------------------------------------------------
@@ -1010,7 +1070,10 @@ mod tests {
 
         // Read A: left=10>=8, right=3<8  → provides left anchor only
         records.push(make_record(
-            b"read_a", 0, 0, 6000,
+            b"read_a",
+            0,
+            0,
+            6000,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(3)],
             13,
         ));
@@ -1019,7 +1082,10 @@ mod tests {
         // Same junction: chr1:6011-6110
         // left anchor: 3M only (no preceding RefSkip to span)
         records.push(make_record(
-            b"read_b", 0, 0, 6007,
+            b"read_b",
+            0,
+            0,
+            6007,
             vec![Cigar::Match(3), Cigar::RefSkip(100), Cigar::Match(10)],
             13,
         ));
@@ -1042,16 +1108,14 @@ mod tests {
             threads: 1,
         };
 
-        let result = process_bam_records(
-            &config,
-            &HashSet::new(),
-            None,
-        ).unwrap();
+        let result = process_bam_records(&config, &HashSet::new(), None).unwrap();
 
         // Per-junction: Read A provides left>=8, Read B provides right>=8 → reported
-        assert!(result.junction_totals.contains_key("chr1:6011-6110:."),
+        assert!(
+            result.junction_totals.contains_key("chr1:6011-6110:."),
             "Expected per-junction anchor to report chr1:6011-6110:., got: {:?}",
-            result.junction_totals.keys().collect::<Vec<_>>());
+            result.junction_totals.keys().collect::<Vec<_>>()
+        );
         // Both reads counted
         assert_eq!(*result.junction_totals.get("chr1:6011-6110:.").unwrap(), 2);
     }
@@ -1073,10 +1137,16 @@ mod tests {
         // Right anchor = 10 >= 8 → right anchor passes
         // With only one read, the junction lacks a left anchor → NOT reported
         records.push(make_record(
-            b"diff_left", 0, 0, 7000,
+            b"diff_left",
+            0,
+            0,
+            7000,
             vec![
-                Cigar::Match(10), Cigar::Diff(1), Cigar::Match(3),
-                Cigar::RefSkip(200), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::Diff(1),
+                Cigar::Match(3),
+                Cigar::RefSkip(200),
+                Cigar::Match(10),
             ],
             24,
         ));
@@ -1087,10 +1157,16 @@ mod tests {
         // Left anchor = 10 >= 8 → left anchor passes
         // With only one read, the junction lacks a right anchor → NOT reported
         records.push(make_record(
-            b"diff_right", 0, 0, 7500,
+            b"diff_right",
+            0,
+            0,
+            7500,
             vec![
-                Cigar::Match(10), Cigar::RefSkip(200), Cigar::Match(3),
-                Cigar::Diff(1), Cigar::Match(10),
+                Cigar::Match(10),
+                Cigar::RefSkip(200),
+                Cigar::Match(3),
+                Cigar::Diff(1),
+                Cigar::Match(10),
             ],
             24,
         ));
@@ -1113,19 +1189,19 @@ mod tests {
             threads: 1,
         };
 
-        let result = process_bam_records(
-            &config,
-            &HashSet::new(),
-            None,
-        ).unwrap();
+        let result = process_bam_records(&config, &HashSet::new(), None).unwrap();
 
         // diff_left: junction chr1:7014-7213 — only right anchor → not reported (no left)
-        assert!(!result.junction_totals.contains_key("chr1:7014-7213:."),
-            "Diff should break left anchor; junction chr1:7014-7213 should NOT be reported");
+        assert!(
+            !result.junction_totals.contains_key("chr1:7014-7213:."),
+            "Diff should break left anchor; junction chr1:7014-7213 should NOT be reported"
+        );
 
         // diff_right: junction chr1:7511-7710 — only left anchor → not reported (no right)
-        assert!(!result.junction_totals.contains_key("chr1:7511-7710:."),
-            "Diff should break right anchor; junction chr1:7511-7710 should NOT be reported");
+        assert!(
+            !result.junction_totals.contains_key("chr1:7511-7710:."),
+            "Diff should break right anchor; junction chr1:7511-7710 should NOT be reported"
+        );
     }
 
     // ---------------------------------------------------------------
@@ -1142,14 +1218,20 @@ mod tests {
         // 1) Read WITHOUT CB tag in single mode → L187 (_ => None)
         //    Will be skipped (mode="single", cell_barcode=None → skip)
         records.push(make_record(
-            b"no_cb", 0, 0, 100,
+            b"no_cb",
+            0,
+            0,
+            100,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(10)],
             20,
         ));
 
         // 2) Read with CB:Z:UNKNOWN-1 (not in interest) → L199 (continue)
         let mut r_unknown = make_record(
-            b"unknown_bc", 0, 0, 200,
+            b"unknown_bc",
+            0,
+            0,
+            200,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(10)],
             20,
         );
@@ -1158,7 +1240,10 @@ mod tests {
 
         // 3) Read with CB:Z:KNOWN-1 (in interest) → processed normally
         let mut r_known = make_record(
-            b"known_bc", 0, 0, 300,
+            b"known_bc",
+            0,
+            0,
+            300,
             vec![Cigar::Match(10), Cigar::RefSkip(100), Cigar::Match(10)],
             20,
         );
@@ -1186,11 +1271,7 @@ mod tests {
             threads: 1,
         };
 
-        let result = process_bam_records(
-            &config,
-            &barcodes_of_interest,
-            None,
-        ).unwrap();
+        let result = process_bam_records(&config, &barcodes_of_interest, None).unwrap();
 
         // Only KNOWN-1 should appear in cell_barcodes
         assert_eq!(result.cell_barcodes.len(), 1);
@@ -1198,8 +1279,10 @@ mod tests {
 
         // Only one junction from the known_bc read
         assert_eq!(result.junction_totals.len(), 0); // junction goes through junction_counts not junction_totals in single mode
-        // In single mode, junctions are in junction_counts
-        assert!(!result.junction_counts.is_empty(),
-            "Expected junction from known_bc read");
+                                                     // In single mode, junctions are in junction_counts
+        assert!(
+            !result.junction_counts.is_empty(),
+            "Expected junction from known_bc read"
+        );
     }
 }
