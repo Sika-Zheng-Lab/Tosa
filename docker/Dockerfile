@@ -1,9 +1,9 @@
 ###############################################################
 # Dockerfile to build container images for Tosa
-# Based on rust slim-bullseye
+# Based on rust slim-bookworm
 ################################################################
 
-FROM rust:slim-bullseye
+FROM rust:slim-bookworm
 
 # File Author / Maintainer
 LABEL maintainer="Naoto Kubota <naotok@ucr.edu>"
