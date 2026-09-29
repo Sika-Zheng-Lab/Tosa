@@ -24,6 +24,19 @@ Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/
 - **Bulk and single-cell** modes (10x Genomics-style cell barcodes)
 - Paired-end read deduplication (same junction/boundary counted once per read pair)
 
+| Feature | STAR/STARsolo (2.7.11a) | regtools (1.0.0) | featureCounts (2.1.1) | **Tosa** |
+|---|---|---|---|---|
+| Pipeline stage | Alignment coupled | Post-alignment (BAM/CRAM) | Post-alignment (BAM) | Post-alignment (BAM/CRAM) |
+| Multi-mapping filter | ✅ | ❌ | ✅ | ✅ |
+| EIB counting | ❌ | ❌ | ❌ | ✅ |
+| PE mate deduplication | ✅ | ❌ | ✅ | ✅ |
+| Multi-threading | ✅ | ❌ | ✅ | ✅ |
+| scRNA-seq support | ✅ | ✅ | ❌ | ✅ |
+| scRNA-seq UMI deduplication | ✅ | ❌ | N/A | ✅ |
+| scRNA-seq output strategy | MatrixMarket | BED+TSV | N/A | MatrixMarket+TSV |
+
+
+
 ## Installation
 
 Install the latest release from [crates.io](https://crates.io/crates/tosa):
