@@ -13,8 +13,21 @@ use crate::boundary::{self, BoundaryIndex};
 use crate::junction;
 use crate::types::{hash_read_name, JunctionKey, Mode, RunConfig, Strand, StrandMode};
 
+/// Alignment-record diagnostics, before junction/boundary deduplication.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct BarcodeStats {
+    /// Records visited by the indexed chromosome scan (not unplaced unmapped reads).
+    pub processed_records: u64,
+    /// Records reaching cell ID extraction after existing alignment filters.
+    pub eligible_records: u64,
+    pub extracted: u64,
+    pub missing: u64,
+    pub whitelist_excluded: u64,
+}
+
 /// Results from processing a BAM file.
 pub struct ProcessingResult {
+    pub barcode_stats: BarcodeStats,
     /// Per-cell junction counts: junction_key -> (barcode -> count). Used in single mode.
     pub junction_counts: HashMap<String, HashMap<String, u32>>,
     /// Total junction counts: junction_key -> count. Used in bulk mode.
@@ -149,6 +162,7 @@ pub fn extract_aligned_segments(record: &bam::Record) -> Vec<(i64, i64)> {
 
 /// Per-chromosome processing result (used internally for merging).
 struct ChromResult {
+    barcode_stats: BarcodeStats,
     junction_counts: HashMap<JunctionKey, HashMap<String, u32>>,
     junction_totals: HashMap<JunctionKey, u32>,
     junction_strands: HashMap<JunctionKey, Strand>,
@@ -171,6 +185,7 @@ fn process_chromosome(
     cell_barcodes_of_interest: &HashSet<String>,
     boundary_index: Option<&BoundaryIndex>,
     reference_names: &[String],
+    barcode_regex: Option<&regex::Regex>,
     progress_counter: &AtomicU64,
     total_mapped_reads: u64,
 ) -> Result<ChromResult, Box<dyn std::error::Error + Send + Sync>> {
@@ -199,6 +214,7 @@ fn process_chromosome(
     let mut processed_boundary_reads: HashMap<String, HashSet<u64>> = HashMap::new();
     let mut processed_boundary_umis: HashMap<String, HashSet<u64>> = HashMap::new();
 
+    let mut barcode_stats = BarcodeStats::default();
     let mut local_read_count: u64 = 0;
     let is_single = config.mode == Mode::Single;
 
@@ -239,12 +255,28 @@ fn process_chromosome(
         let ref_name = &reference_names[rec_tid as usize];
         let mut current_pos = record.pos();
 
-        // Extract Cell Barcode (CB) from tags if in single mode
+        // Extract only the cell ID; retain the original QNAME for deduplication.
         let cell_barcode = if is_single {
-            match record.aux(b"CB") {
-                Ok(Aux::String(cb_str)) => Some(cb_str.to_string()),
-                _ => None,
+            barcode_stats.eligible_records += 1;
+            let barcode = if let Some(regex) = barcode_regex {
+                std::str::from_utf8(record.qname())
+                    .ok()
+                    .and_then(|name| regex.captures(name))
+                    .and_then(|captures| captures.get(1))
+                    .map(|value| value.as_str().to_string())
+            } else {
+                match record.aux(b"CB") {
+                    Ok(Aux::String(value)) => Some(value.to_string()),
+                    _ => None,
+                }
             }
+            .filter(|value| !value.is_empty());
+            if barcode.is_some() {
+                barcode_stats.extracted += 1;
+            } else {
+                barcode_stats.missing += 1;
+            }
+            barcode
         } else {
             None
         };
@@ -265,6 +297,7 @@ fn process_chromosome(
                 && !cell_barcodes_of_interest.is_empty()
                 && !cell_barcodes_of_interest.contains(cb)
             {
+                barcode_stats.whitelist_excluded += 1;
                 continue;
             }
         }
@@ -402,7 +435,9 @@ fn process_chromosome(
         progress_counter.fetch_add(remainder, Ordering::Relaxed);
     }
 
+    barcode_stats.processed_records = local_read_count;
     Ok(ChromResult {
+        barcode_stats,
         junction_counts: junction_state.junction_counts,
         junction_totals: junction_state.junction_totals,
         junction_strands,
@@ -424,6 +459,7 @@ pub fn process_bam_records(
     cell_barcodes_of_interest: &HashSet<String>,
     boundary_index: Option<&BoundaryIndex>,
 ) -> Result<ProcessingResult, Box<dyn std::error::Error + Send + Sync>> {
+    let barcode_regex = config.compile_barcode_regex()?;
     let total_mapped_reads = count_total_reads(&config.bam_file, config.threads)?;
     info!("Total number of reads: {}", total_mapped_reads);
 
@@ -465,6 +501,7 @@ pub fn process_bam_records(
                         cell_barcodes_of_interest,
                         boundary_index,
                         &reference_names,
+                        barcode_regex.as_ref(),
                         &progress_counter,
                         total_mapped_reads,
                     )
@@ -484,8 +521,14 @@ pub fn process_bam_records(
     let mut boundary_types: HashMap<String, crate::types::BoundaryType> = HashMap::new();
     let mut boundary_strands: HashMap<String, Strand> = HashMap::new();
 
+    let mut barcode_stats = BarcodeStats::default();
     for chrom_result in chrom_results {
         let cr = chrom_result?;
+        barcode_stats.processed_records += cr.barcode_stats.processed_records;
+        barcode_stats.eligible_records += cr.barcode_stats.eligible_records;
+        barcode_stats.extracted += cr.barcode_stats.extracted;
+        barcode_stats.missing += cr.barcode_stats.missing;
+        barcode_stats.whitelist_excluded += cr.barcode_stats.whitelist_excluded;
 
         // Merge junction data — keys are unique per chromosome so extend() is safe
         junction_counts.extend(cr.junction_counts);
@@ -513,6 +556,15 @@ pub fn process_bam_records(
         "Progress: 100% ({} / {})",
         total_mapped_reads, total_mapped_reads
     );
+
+    if config.mode == Mode::Single {
+        info!("Cell ID diagnostics: processed_records={}, eligible_records={}, extracted={}, missing={}, whitelist_excluded={}",
+            barcode_stats.processed_records, barcode_stats.eligible_records, barcode_stats.extracted,
+            barcode_stats.missing, barcode_stats.whitelist_excluded);
+        if barcode_stats.eligible_records > 0 && barcode_stats.extracted == 0 {
+            return Err(format!("No cell IDs could be extracted from {} eligible records (source: {:?}). Check CB tags or specify --barcode-source qname --barcode-regex with the cell ID in capture group 1; check that the regex matches the read names.", barcode_stats.eligible_records, config.barcode_source).into());
+        }
+    }
 
     // Filter junctions: only emit those where at least one read provided a
     // sufficient left anchor AND at least one read provided a sufficient right
@@ -542,6 +594,7 @@ pub fn process_bam_records(
         .collect();
 
     Ok(ProcessingResult {
+        barcode_stats,
         junction_counts: junction_counts_out,
         junction_totals: junction_totals_out,
         junction_strands: junction_strands_out,
@@ -1029,6 +1082,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: None,
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: StrandMode::Unstranded,
             gtf_file: None,
             verbose: false,
@@ -1101,6 +1156,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: None,
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: StrandMode::Unstranded,
             gtf_file: None,
             verbose: false,
@@ -1181,6 +1238,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: None,
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: StrandMode::Unstranded,
             gtf_file: None,
             verbose: false,
@@ -1263,6 +1322,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: Some("dummy_path".to_string()),
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: StrandMode::Unstranded,
             gtf_file: None,
             verbose: false,

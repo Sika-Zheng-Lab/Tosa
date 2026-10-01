@@ -21,7 +21,7 @@ Fast junction and exon-intron boundary read counting from RNA-seq/scRNA-seq BAM/
 - **Exon-intron boundary read counting** using GTF annotation (boundary intervals straddle splice sites)
 - **BAM and CRAM** input support (CRAM files are read without a reference FASTA)
 - **Strand specificity** support: unstranded, XS tag, RF (first-strand), FR (second-strand)
-- **Bulk and single-cell** modes (10x Genomics-style cell barcodes)
+- **Bulk and single-cell** modes (CB tags or explicit read-name barcode extraction)
 - Paired-end read deduplication (same junction/boundary counted once per read pair)
 
 | Feature | STAR/STARsolo (2.7.11a) | regtools (1.0.0) | featureCounts (2.1.1) | **Tosa** |
@@ -90,12 +90,39 @@ tosa bulk -s RF -g annotation.gtf input.bam output_prefix
 # Count junction reads from single-cell RNA-seq BAM file
 tosa single -c barcodes.tsv input.bam output_prefix
 
+# STARsolo SmartSeq: extract the cell ID from names such as SRR7408615.1692427
+# barcodes.tsv must contain one cell ID per line (e.g. SRR7408615)
+tosa single --barcode-source qname --barcode-regex '^(SRR[0-9]+)\.' \
+  -c barcodes.tsv -g annotation.gtf input.bam output_prefix
+
 # Use a CRAM file instead of BAM (no reference FASTA needed)
 tosa bulk input.cram output_prefix
 
 # CRAM with GTF annotation and strand specificity
 tosa bulk -s RF -g annotation.gtf input.cram output_prefix
 ```
+
+Single mode defaults to `--barcode-source cb`, reading the `CB` tag. For
+`--barcode-source qname`, `--barcode-regex` is required; its first capture group
+is the cell ID. Invalid regexes and patterns without capture groups are rejected.
+Nonmatching names and missing or empty first captures are skipped. There is no
+automatic fallback between sources. Barcode extraction options apply to single
+mode only; `--barcode-regex` requires the `qname` source.
+
+The extracted ID is passed through the existing `--cell-barcodes` filter (a
+nonempty list, one ID per line; an empty list retains the existing behavior of
+processing all cells). Original read names remain unchanged for deduplication.
+`UB` tags continue to control UMI deduplication when present; without `UB`,
+Tosa uses the original read name and does not create pseudo-UMIs.
+
+Single mode logs `processed_records` (records visited by indexed chromosome
+scans, excluding unplaced unmapped records), `eligible_records` (records reaching
+barcode extraction after alignment/NH filtering), `extracted`, `missing`, and
+`whitelist_excluded`. These count alignment records before deduplication;
+`extracted + missing = eligible_records`, and whitelist exclusions are a subset
+of extracted records. If eligible records exist but no cell IDs can be extracted,
+Tosa exits with an explanation before writing output. An empty input, or a
+whitelist that excludes all extracted IDs, does not trigger this error.
 
 ## Strand settings
 
@@ -172,6 +199,10 @@ Options:
           Maximum number of loci the read maps to [default: 1]
   -c, --cell-barcodes <cell_barcode_file>
           Optional file specifying cell barcodes of interest
+      --barcode-source <barcode_source>
+          Cell ID source in single mode: CB tag or read name [default: cb] [possible values: cb, qname]
+      --barcode-regex <barcode_regex>
+          Regex for qname mode; first capture group is the cell ID
   -s, --strand <strand>
           Strand specificity of RNA library: RF (first-strand), FR (second-strand),
           XS (use XS tags). Omit for unstranded [possible values: RF, FR, XS]

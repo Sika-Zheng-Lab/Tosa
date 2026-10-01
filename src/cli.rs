@@ -54,6 +54,14 @@ pub fn build_cli() -> Command {
             .long("cell-barcodes")
             .value_parser(clap::value_parser!(String))
             .help("Optional file specifying cell barcodes of interest"))
+        .arg(Arg::new("barcode_source")
+            .long("barcode-source")
+            .default_value("cb")
+            .value_parser(["cb", "qname"])
+            .help("Cell ID source in single mode: CB tag or read name"))
+        .arg(Arg::new("barcode_regex")
+            .long("barcode-regex")
+            .help("Regex for qname mode; first capture group is the cell ID"))
         .arg(Arg::new("strand")
             .short('s')
             .long("strand")
@@ -92,6 +100,15 @@ pub fn parse_config(matches: &clap::ArgMatches) -> RunConfig {
         max_intron_length: *matches.get_one::<i64>("max_intron_length").unwrap(),
         max_loci: *matches.get_one::<u32>("max_loci").unwrap(),
         cell_barcode_file: matches.get_one::<String>("cell_barcode_file").cloned(),
+        barcode_source: match matches
+            .get_one::<String>("barcode_source")
+            .unwrap()
+            .as_str()
+        {
+            "qname" => crate::types::BarcodeSource::Qname,
+            _ => crate::types::BarcodeSource::Cb,
+        },
+        barcode_regex: matches.get_one::<String>("barcode_regex").cloned(),
         strand_mode: StrandMode::from_str_opt(matches.get_one::<String>("strand")),
         gtf_file: matches.get_one::<String>("gtf_file").cloned(),
         verbose: matches.get_flag("verbose"),

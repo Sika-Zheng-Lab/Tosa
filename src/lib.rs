@@ -28,6 +28,9 @@ use types::{Mode, RunConfig};
 /// This is the main entry point for the library, executing the full pipeline:
 /// loading barcodes, parsing GTF, processing BAM, and writing output.
 pub fn run(config: &RunConfig) -> Result<(), Box<dyn std::error::Error>> {
+    config
+        .compile_barcode_regex()
+        .map_err(|e| -> Box<dyn std::error::Error> { e })?;
     // Log configuration
     info!("Running tosa v{}", env!("CARGO_PKG_VERSION"));
     info!("Mode: {}", config.mode);
@@ -43,6 +46,12 @@ pub fn run(config: &RunConfig) -> Result<(), Box<dyn std::error::Error>> {
     info!("Maximum loci (NH): {}", config.max_loci);
     info!("Strand mode: {}", config.strand_mode);
     info!("Threads: {}", config.threads);
+    if config.mode == Mode::Single {
+        info!("Barcode source: {:?}", config.barcode_source);
+        if let Some(pattern) = &config.barcode_regex {
+            info!("Barcode regex: {}", pattern);
+        }
+    }
 
     // Load cell barcodes of interest (single mode only)
     let cell_barcodes_of_interest = if config.mode == Mode::Single {
@@ -164,6 +173,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: None,
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: types::StrandMode::Unstranded,
             gtf_file: Some(test_gtf_path()),
             verbose: false,
@@ -198,6 +209,8 @@ mod tests {
             max_intron_length: 500000,
             max_loci: 1,
             cell_barcode_file: Some(test_barcodes_path()),
+            barcode_source: crate::types::BarcodeSource::Cb,
+            barcode_regex: None,
             strand_mode: types::StrandMode::Unstranded,
             gtf_file: Some(test_gtf_path()),
             verbose: false,

@@ -2,6 +2,12 @@
 
 All notable changes to this Tosa project will be documented in this file.
 
+## Unreleased
+
+- Add explicit single-mode barcode extraction from read names with `--barcode-source qname --barcode-regex`; CB tags remain the default.
+- Report cell ID extraction and whitelist diagnostics, and fail before writing output if eligible records exist but no cell IDs can be extracted.
+- Preserve original read-name/UB deduplication and add regression tests for junction and boundary counts, missing IDs, and whitelist filtering.
+
 ## [v1.0.0] - 2026-09-24
 
 First stable release of Tosa!

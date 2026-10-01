@@ -132,6 +132,14 @@ impl fmt::Display for BoundaryType {
     }
 }
 
+/// Explicit source of cell IDs in single mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BarcodeSource {
+    #[default]
+    Cb,
+    Qname,
+}
+
 /// Configuration for a Tosa run, parsed from CLI arguments.
 #[derive(Debug, Clone)]
 pub struct RunConfig {
@@ -153,6 +161,10 @@ pub struct RunConfig {
     pub max_loci: u32,
     /// Optional path to cell barcode file.
     pub cell_barcode_file: Option<String>,
+    /// Cell ID source (defaults to CB tags in the CLI).
+    pub barcode_source: BarcodeSource,
+    /// QNAME regex; the first capture group is the cell ID.
+    pub barcode_regex: Option<String>,
     /// Strand specificity mode.
     pub strand_mode: StrandMode,
     /// Optional path to GTF annotation file.
@@ -161,6 +173,38 @@ pub struct RunConfig {
     pub verbose: bool,
     /// Number of threads for parallel processing.
     pub threads: usize,
+}
+
+impl RunConfig {
+    /// Validate barcode options and compile the regex once before reading alignments.
+    pub fn compile_barcode_regex(
+        &self,
+    ) -> Result<Option<regex::Regex>, Box<dyn std::error::Error + Send + Sync>> {
+        if self.mode != Mode::Single
+            && (self.barcode_source != BarcodeSource::Cb || self.barcode_regex.is_some())
+        {
+            return Err("Barcode extraction options require single mode".into());
+        }
+        match (self.barcode_source, self.barcode_regex.as_deref()) {
+            (BarcodeSource::Cb, None) => Ok(None),
+            (BarcodeSource::Cb, Some(_)) => {
+                Err("--barcode-regex requires --barcode-source qname".into())
+            }
+            (BarcodeSource::Qname, None) => Err(
+                "--barcode-source qname requires --barcode-regex with a first capture group".into(),
+            ),
+            (BarcodeSource::Qname, Some(pattern)) => {
+                let regex = regex::Regex::new(pattern)
+                    .map_err(|e| format!("Invalid --barcode-regex: {e}"))?;
+                if regex.captures_len() < 2 {
+                    return Err(
+                        "--barcode-regex must contain a first capture group for the cell ID".into(),
+                    );
+                }
+                Ok(Some(regex))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
